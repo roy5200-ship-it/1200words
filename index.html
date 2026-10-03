@@ -143,7 +143,12 @@
 
 <script src="words.js"></script>
 <script>
+window.addEventListener('error', function(e){
+  const b=document.getElementById('totalBadge');
+  if(b) b.textContent='載入失敗';
+});
 (() => {
+  try {
   const WORDS = window.WORDS || [];
   const $ = id => document.getElementById(id);
 
@@ -161,10 +166,13 @@
   };
 
   // ---------- 初始化語音 ----------
-  const synth = window.speechSynthesis;
+  // 部分 Android WebView（LINE/FB 內建瀏覽器）不支援 speechSynthesis，需守護
+  const synth = window.speechSynthesis || null;
+  const ttsSupported = !!synth;
   let voices = [];
   function loadVoices(){
-    voices = synth.getVoices();
+    if(!synth) return;
+    try { voices = synth.getVoices() || []; } catch(e){ voices = []; }
     const enSel = $('enVoice'), zhSel = $('zhVoice');
     const prevEn = enSel.value, prevZh = zhSel.value;
     enSel.innerHTML = ''; zhSel.innerHTML = '';
@@ -172,16 +180,18 @@
     const zhList = voices.filter(v => /zh|cmn|yue/i.test(v.lang));
     enList.forEach(v => { const o=document.createElement('option'); o.value=v.name; o.textContent=`${v.name} (${v.lang})`; enSel.appendChild(o); });
     zhList.forEach(v => { const o=document.createElement('option'); o.value=v.name; o.textContent=`${v.name} (${v.lang})`; zhSel.appendChild(o); });
-    if(!enSel.value) enSel.value = prevEn || (enList[0]&&enList[0].name);
-    if(!zhSel.value) zhSel.value = prevZh || (zhList[0]&&zhList[0].name);
-    state.enVoice = voices.find(v=>v.name===enSel.value) || enList[0];
-    state.zhVoice = voices.find(v=>v.name===zhSel.value) || zhList[0];
+    if(!enSel.value) enSel.value = prevEn || (enList[0]&&enList[0].name) || '';
+    if(!zhSel.value) zhSel.value = prevZh || (zhList[0]&&zhList[0].name) || '';
+    state.enVoice = voices.find(v=>v.name===enSel.value) || enList[0] || null;
+    state.zhVoice = voices.find(v=>v.name===zhSel.value) || zhList[0] || null;
   }
-  loadVoices();
-  if(synth.onvoiceschanged !== undefined) synth.onvoiceschanged = loadVoices;
+  try { loadVoices(); } catch(e){}
+  if(synth && synth.onvoiceschanged !== undefined) synth.onvoiceschanged = loadVoices;
 
   // ---------- UI 繪製 ----------
   $('totalBadge').textContent = `共 ${WORDS.length} 字`;
+  // 分批渲染：避免手機一次建立上千個 DOM 節點造成凍結
+  let renderToken = 0;
   function renderList(){
     const list = $('list');
     list.innerHTML = '';
@@ -189,21 +199,35 @@
       list.innerHTML = '<div class="empty">無符合的單字</div>';
       return;
     }
+    renderToken++;
+    const myToken = renderToken;
     const frag = document.createDocumentFragment();
-    state.filtered.forEach((w, fi) => {
-      const oi = state.filterMap[fi];
-      const div = document.createElement('div');
-      div.className = 'item' + (oi === state.index ? ' current' : '');
-      div.innerHTML = `<span class="n">${oi+1}</span><span class="w"></span><span class="m"></span>`;
-      div.children[1].textContent = w.word;
-      div.children[2].textContent = w.meaning;
-      div.onclick = () => { state.index = oi; renderCurrent(); playFromCurrent(); };
-      frag.appendChild(div);
-    });
-    list.appendChild(frag);
-    // 捲動到目前
-    const cur = list.querySelector('.item.current');
-    if(cur) cur.scrollIntoView({block:'nearest'});
+    const total = state.filtered.length;
+    const CHUNK = 80;
+    let i = 0;
+    function buildChunk(){
+      if(myToken !== renderToken) return; // 已被新的 renderList 取代
+      const end = Math.min(i + CHUNK, total);
+      for(; i < end; i++){
+        const w = state.filtered[i];
+        const oi = state.filterMap[i];
+        const div = document.createElement('div');
+        div.className = 'item' + (oi === state.index ? ' current' : '');
+        div.innerHTML = `<span class="n">${oi+1}</span><span class="w"></span><span class="m"></span>`;
+        div.children[1].textContent = w.word;
+        div.children[2].textContent = w.meaning;
+        div.onclick = () => { state.index = oi; renderCurrent(); playFromCurrent(); };
+        frag.appendChild(div);
+      }
+      list.appendChild(frag);
+      if(i < total){
+        setTimeout(buildChunk, 0);
+      } else {
+        const cur = list.querySelector('.item.current');
+        if(cur) cur.scrollIntoView({block:'nearest'});
+      }
+    }
+    buildChunk();
   }
   function renderCurrent(){
     const w = WORDS[state.index];
@@ -242,8 +266,8 @@
 
   function speakNext(){
     if(manualStop) return;
+    if(!synth){ handleWordEnd(); return; }
     if(qIdx >= queue.length){
-      // 目前單字播完
       handleWordEnd();
       return;
     }
@@ -254,7 +278,7 @@
     u.rate = item.rate; u.pitch = item.pitch;
     u.onend = () => { qIdx++; const gap = item.gap || 250; setTimeout(speakNext, gap); };
     u.onerror = (e) => { if(e.error !== 'interrupted' && e.error !== 'canceled'){ qIdx++; setTimeout(speakNext, 200);} };
-    synth.speak(u);
+    try { synth.speak(u); } catch(e){ qIdx++; setTimeout(speakNext, 200); }
   }
 
   function handleWordEnd(){
@@ -275,7 +299,7 @@
   function startWord(idx){
     queue = buildQueue(WORDS[idx]);
     qIdx = 0;
-    synth.cancel();
+    if(synth) { try{ synth.cancel(); }catch(e){} }
     speakNext();
   }
 
@@ -287,25 +311,29 @@
   }
 
   function pause(){
-    synth.pause();
+    if(synth) { try{ synth.pause(); }catch(e){} }
     state.playing = false;
     updatePlayBtn();
   }
   function resume(){
     manualStop = false;
     state.playing = true;
-    synth.resume();
+    if(synth) { try{ synth.resume(); }catch(e){} }
     updatePlayBtn();
   }
   function stop(){
     manualStop = true;
-    synth.cancel();
+    if(synth) { try{ synth.cancel(); }catch(e){} }
     state.playing = false;
     updatePlayBtn();
   }
   function togglePlay(){
+    if(!ttsSupported){
+      alert('您的瀏覽器不支援語音播放 (Web Speech API)。\n建議使用 Chrome / Edge 開啟，或安裝手機 TTS 引擎。');
+      return;
+    }
     if(!state.playing){
-      if(synth.paused){ resume(); }
+      if(synth && synth.paused){ resume(); }
       else { playFromCurrent(); }
     } else {
       pause();
@@ -363,8 +391,21 @@
   });
 
   // 初始
-  renderList();
-  renderCurrent();
+  try {
+    renderList();
+    renderCurrent();
+    if(!ttsSupported){
+      const b=$('totalBadge'); if(b) b.textContent='⚠ 無TTS '+WORDS.length+'字';
+    }
+  } catch(e){
+    const b=$('totalBadge'); if(b) b.textContent='載入失敗';
+    console.error(e);
+  }
+  } catch(e){
+    const b=document.getElementById('totalBadge');
+    if(b) b.textContent='載入失敗';
+    console.error(e);
+  }
 })();
 </script>
 </body>
