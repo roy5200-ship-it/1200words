@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>國中基礎 1200 單字 · 語音記憶</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#1e293b; --card2:#273449; --text:#e2e8f0; --muted:#94a3b8;
+    --accent:#38bdf8; --accent2:#818cf8; --ok:#34d399; --warn:#fbbf24; --danger:#f87171;
+    --line:#334155;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:"Segoe UI","Microsoft JhengHei","PingFang TC",sans-serif;}
+  .wrap{max-width:1100px;margin:0 auto;padding:20px;}
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:18px;}
+  h1{font-size:22px;margin:0;letter-spacing:1px;}
+  h1 .sub{font-size:13px;color:var(--muted);font-weight:400;margin-left:8px;}
+  .badge{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b1220;
+    padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;}
+
+  /* 控制面板 */
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px;}
+  .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
+  .row + .row{margin-top:12px;}
+  button{cursor:pointer;border:none;border-radius:10px;padding:10px 16px;font-size:14px;font-weight:600;
+    background:var(--card2);color:var(--text);transition:.15s;}
+  button:hover{filter:brightness(1.15);}
+  button:active{transform:translateY(1px);}
+  button.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b1220;}
+  button.danger{background:#475569;}
+  button.active{outline:2px solid var(--accent);}
+  .btn-group{display:flex;gap:6px;}
+  .btn-group button{border-radius:8px;}
+  label{font-size:13px;color:var(--muted);}
+  select,input[type=text]{background:var(--card2);color:var(--text);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;font-size:13px;}
+  input[type=range]{accent-color:var(--accent);}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .val{font-size:12px;color:var(--accent);font-weight:700;}
+
+  /* 目前單字顯示 */
+  .stage{background:linear-gradient(160deg,#1e293b,#0f172a);border:1px solid var(--line);
+    border-radius:18px;padding:36px 24px;text-align:center;margin-bottom:16px;position:relative;overflow:hidden;}
+  .stage .idx{position:absolute;top:14px;right:18px;color:var(--muted);font-size:13px;}
+  .word{font-size:52px;font-weight:800;letter-spacing:1px;margin:8px 0;
+    background:linear-gradient(135deg,#e2e8f0,#93c5fd);-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .meaning{font-size:20px;color:var(--muted);min-height:30px;}
+  .meaning.show{color:var(--text);}
+  .progress{height:6px;background:var(--card2);border-radius:999px;overflow:hidden;margin-top:18px;}
+  .progress > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .3s;}
+  .hint{font-size:12px;color:var(--muted);margin-top:10px;}
+
+  /* 單字清單 */
+  .list-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .list-head .count{color:var(--muted);font-size:13px;}
+  .search{width:260px;}
+  .list{max-height:460px;overflow-y:auto;background:var(--card);border:1px solid var(--line);
+    border-radius:12px;padding:6px;}
+  .item{display:flex;gap:10px;padding:8px 12px;border-radius:8px;cursor:pointer;align-items:baseline;}
+  .item:hover{background:var(--card2);}
+  .item.current{background:rgba(56,189,248,.18);outline:1px solid var(--accent);}
+  .item .w{font-weight:700;min-width:160px;}
+  .item .m{color:var(--muted);font-size:13px;}
+  .item .n{color:var(--muted);font-size:11px;min-width:34px;}
+  .empty{color:var(--muted);text-align:center;padding:20px;}
+  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:20px;}
+  .kbd{background:var(--card2);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:11px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🎧 國中基礎 1200 單字<span class="sub">自然語音記憶 APP</span></h1>
+    <span class="badge" id="totalBadge">載入中…</span>
+  </header>
+
+  <!-- 控制面板 -->
+  <div class="panel">
+    <div class="row">
+      <div class="btn-group">
+        <button id="btnPrev" title="上一個 (←)">⏮</button>
+        <button id="btnPlay" class="primary" title="播放/暫停 (空白鍵)">▶ 播放</button>
+        <button id="btnStop" class="danger" title="停止">⏹</button>
+        <button id="btnNext" title="下一個 (→)">⏭</button>
+      </div>
+      <div class="field">
+        <label>速度 <span class="val" id="rateVal">1.0x</span></label>
+        <input type="range" id="rate" min="0.5" max="2" step="0.1" value="1">
+      </div>
+      <div class="field">
+        <label>音調 <span class="val" id="pitchVal">1.0</span></label>
+        <input type="range" id="pitch" min="0.5" max="1.8" step="0.1" value="1">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>播放模式</label>
+        <div class="btn-group" id="modeGroup">
+          <button data-mode="en" class="active">僅英文</button>
+          <button data-mode="encn">英 → 中</button>
+          <button data-mode="enen">英文 ×2</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>重複</label>
+        <div class="btn-group" id="repeatGroup">
+          <button data-repeat="none" class="active">不重複</button>
+          <button data-repeat="one">單字循環</button>
+          <button data-repeat="all">全部循環</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>英文語音</label>
+        <select id="enVoice"></select>
+      </div>
+      <div class="field">
+        <label>中文語音</label>
+        <select id="zhVoice"></select>
+      </div>
+    </div>
+  </div>
+
+  <!-- 目前單字 -->
+  <div class="stage">
+    <div class="idx" id="idxText">0 / 0</div>
+    <div class="word" id="curWord">—</div>
+    <div class="meaning" id="curMeaning">—</div>
+    <div class="progress"><i id="bar"></i></div>
+    <div class="hint">提示：空白鍵播放/暫停 · ← → 切換單字 · 點擊清單可跳轉</div>
+  </div>
+
+  <!-- 單字清單 -->
+  <div class="list-head">
+    <input type="text" class="search" id="search" placeholder="🔍 搜尋英文或中文…">
+    <span class="count" id="countText"></span>
+  </div>
+  <div class="list" id="list"></div>
+
+  <footer>資料來源：han-lin.tw 國中基礎 1200 單字 PDF · 語音由瀏覽器 Web Speech API 提供</footer>
+</div>
+
+<script src="words.js"></script>
+<script>
+(() => {
+  const WORDS = window.WORDS || [];
+  const $ = id => document.getElementById(id);
+
+  let state = {
+    index: 0,
+    playing: false,
+    mode: 'en',          // en | encn | enen
+    repeat: 'none',      // none | one | all
+    rate: 1,
+    pitch: 1,
+    enVoice: null,
+    zhVoice: null,
+    filtered: WORDS.slice(),
+    filterMap: WORDS.map((_, i) => i), // filtered index -> original index
+  };
+
+  // ---------- 初始化語音 ----------
+  const synth = window.speechSynthesis;
+  let voices = [];
+  function loadVoices(){
+    voices = synth.getVoices();
+    const enSel = $('enVoice'), zhSel = $('zhVoice');
+    const prevEn = enSel.value, prevZh = zhSel.value;
+    enSel.innerHTML = ''; zhSel.innerHTML = '';
+    const enList = voices.filter(v => /en/i.test(v.lang));
+    const zhList = voices.filter(v => /zh|cmn|yue/i.test(v.lang));
+    enList.forEach(v => { const o=document.createElement('option'); o.value=v.name; o.textContent=`${v.name} (${v.lang})`; enSel.appendChild(o); });
+    zhList.forEach(v => { const o=document.createElement('option'); o.value=v.name; o.textContent=`${v.name} (${v.lang})`; zhSel.appendChild(o); });
+    if(!enSel.value) enSel.value = prevEn || (enList[0]&&enList[0].name);
+    if(!zhSel.value) zhSel.value = prevZh || (zhList[0]&&zhList[0].name);
+    state.enVoice = voices.find(v=>v.name===enSel.value) || enList[0];
+    state.zhVoice = voices.find(v=>v.name===zhSel.value) || zhList[0];
+  }
+  loadVoices();
+  if(synth.onvoiceschanged !== undefined) synth.onvoiceschanged = loadVoices;
+
+  // ---------- UI 繪製 ----------
+  $('totalBadge').textContent = `共 ${WORDS.length} 字`;
+  function renderList(){
+    const list = $('list');
+    list.innerHTML = '';
+    if(state.filtered.length === 0){
+      list.innerHTML = '<div class="empty">無符合的單字</div>';
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    state.filtered.forEach((w, fi) => {
+      const oi = state.filterMap[fi];
+      const div = document.createElement('div');
+      div.className = 'item' + (oi === state.index ? ' current' : '');
+      div.innerHTML = `<span class="n">${oi+1}</span><span class="w"></span><span class="m"></span>`;
+      div.children[1].textContent = w.word;
+      div.children[2].textContent = w.meaning;
+      div.onclick = () => { state.index = oi; renderCurrent(); playFromCurrent(); };
+      frag.appendChild(div);
+    });
+    list.appendChild(frag);
+    // 捲動到目前
+    const cur = list.querySelector('.item.current');
+    if(cur) cur.scrollIntoView({block:'nearest'});
+  }
+  function renderCurrent(){
+    const w = WORDS[state.index];
+    $('curWord').textContent = w.word;
+    const m = $('curMeaning');
+    m.textContent = w.meaning;
+    m.classList.toggle('show', state.mode !== 'en');
+    $('idxText').textContent = `${state.index+1} / ${WORDS.length}`;
+    $('bar').style.width = ((state.index+1)/WORDS.length*100)+'%';
+    $('countText').textContent = `顯示 ${state.filtered.length} / ${WORDS.length}`;
+    // 更新清單高亮
+    document.querySelectorAll('.item').forEach((el,i)=>{
+      el.classList.toggle('current', state.filterMap[i]===state.index);
+    });
+  }
+
+  // ---------- 語音播放引擎 ----------
+  let queue = [];
+  let qIdx = 0;
+  let manualStop = false;
+
+  function buildQueue(entry){
+    const q = [];
+    const rate = state.rate, pitch = state.pitch;
+    if(state.mode === 'en'){
+      q.push({text:entry.word, voice:state.enVoice, lang:'en-US', rate, pitch});
+    } else if(state.mode === 'enen'){
+      q.push({text:entry.word, voice:state.enVoice, lang:'en-US', rate, pitch});
+      q.push({text:entry.word, voice:state.enVoice, lang:'en-US', rate, pitch, gap:350});
+    } else if(state.mode === 'encn'){
+      q.push({text:entry.word, voice:state.enVoice, lang:'en-US', rate, pitch});
+      q.push({text:entry.meaning, voice:state.zhVoice, lang:'zh-TW', rate:rate*0.95, pitch, gap:400});
+    }
+    return q;
+  }
+
+  function speakNext(){
+    if(manualStop) return;
+    if(qIdx >= queue.length){
+      // 目前單字播完
+      handleWordEnd();
+      return;
+    }
+    const item = queue[qIdx];
+    const u = new SpeechSynthesisUtterance(item.text);
+    if(item.voice) u.voice = item.voice;
+    u.lang = item.lang || (item.voice && item.voice.lang) || 'en-US';
+    u.rate = item.rate; u.pitch = item.pitch;
+    u.onend = () => { qIdx++; const gap = item.gap || 250; setTimeout(speakNext, gap); };
+    u.onerror = (e) => { if(e.error !== 'interrupted' && e.error !== 'canceled'){ qIdx++; setTimeout(speakNext, 200);} };
+    synth.speak(u);
+  }
+
+  function handleWordEnd(){
+    if(state.repeat === 'one'){
+      startWord(state.index);
+      return;
+    }
+    let next = state.index + 1;
+    if(next >= WORDS.length){
+      if(state.repeat === 'all'){ next = 0; }
+      else { state.playing = false; updatePlayBtn(); return; }
+    }
+    state.index = next;
+    renderCurrent();
+    startWord(next);
+  }
+
+  function startWord(idx){
+    queue = buildQueue(WORDS[idx]);
+    qIdx = 0;
+    synth.cancel();
+    speakNext();
+  }
+
+  function playFromCurrent(){
+    manualStop = false;
+    state.playing = true;
+    updatePlayBtn();
+    startWord(state.index);
+  }
+
+  function pause(){
+    synth.pause();
+    state.playing = false;
+    updatePlayBtn();
+  }
+  function resume(){
+    manualStop = false;
+    state.playing = true;
+    synth.resume();
+    updatePlayBtn();
+  }
+  function stop(){
+    manualStop = true;
+    synth.cancel();
+    state.playing = false;
+    updatePlayBtn();
+  }
+  function togglePlay(){
+    if(!state.playing){
+      if(synth.paused){ resume(); }
+      else { playFromCurrent(); }
+    } else {
+      pause();
+    }
+  }
+  function updatePlayBtn(){
+    const b = $('btnPlay');
+    b.textContent = state.playing ? '⏸ 暫停' : '▶ 播放';
+    b.classList.toggle('active', state.playing);
+  }
+
+  // ---------- 事件 ----------
+  $('btnPlay').onclick = togglePlay;
+  $('btnStop').onclick = stop;
+  $('btnPrev').onclick = () => { state.index = Math.max(0, state.index-1); renderCurrent(); if(state.playing){playFromCurrent();} };
+  $('btnNext').onclick = () => { state.index = Math.min(WORDS.length-1, state.index+1); renderCurrent(); if(state.playing){playFromCurrent();} };
+
+  $('rate').oninput = e => { state.rate = parseFloat(e.target.value); $('rateVal').textContent = state.rate.toFixed(1)+'x'; if(state.playing){playFromCurrent();} };
+  $('pitch').oninput = e => { state.pitch = parseFloat(e.target.value); $('pitchVal').textContent = state.pitch.toFixed(1); if(state.playing){playFromCurrent();} };
+
+  $('modeGroup').addEventListener('click', e => {
+    const b = e.target.closest('button'); if(!b) return;
+    state.mode = b.dataset.mode;
+    document.querySelectorAll('#modeGroup button').forEach(x=>x.classList.toggle('active',x===b));
+    renderCurrent();
+    if(state.playing) playFromCurrent();
+  });
+  $('repeatGroup').addEventListener('click', e => {
+    const b = e.target.closest('button'); if(!b) return;
+    state.repeat = b.dataset.repeat;
+    document.querySelectorAll('#repeatGroup button').forEach(x=>x.classList.toggle('active',x===b));
+  });
+  $('enVoice').onchange = e => { state.enVoice = voices.find(v=>v.name===e.target.value); if(state.playing) playFromCurrent(); };
+  $('zhVoice').onchange = e => { state.zhVoice = voices.find(v=>v.name===e.target.value); if(state.playing) playFromCurrent(); };
+
+  $('search').oninput = e => {
+    const q = e.target.value.trim().toLowerCase();
+    if(!q){ state.filtered = WORDS.slice(); state.filterMap = WORDS.map((_,i)=>i); }
+    else {
+      state.filtered = []; state.filterMap = [];
+      WORDS.forEach((w,i)=>{
+        if(w.word.toLowerCase().includes(q) || w.meaning.toLowerCase().includes(q)){
+          state.filtered.push(w); state.filterMap.push(i);
+        }
+      });
+    }
+    renderList();
+  };
+
+  document.addEventListener('keydown', e => {
+    if(e.target.tagName === 'INPUT') return;
+    if(e.code === 'Space'){ e.preventDefault(); togglePlay(); }
+    else if(e.code === 'ArrowLeft'){ $('btnPrev').click(); }
+    else if(e.code === 'ArrowRight'){ $('btnNext').click(); }
+  });
+
+  // 初始
+  renderList();
+  renderCurrent();
+})();
+</script>
+</body>
+</html>
